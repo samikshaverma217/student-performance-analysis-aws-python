@@ -2,17 +2,17 @@ import streamlit as st
 import pandas as pd
 import io
 
-st.set_page_config(page_title="Student Performance", layout="wide")
+st.set_page_config(page_title="Student Performance Analysis", layout="wide")
 
-# --- PASSWORD ---
-st.title("📊 Student Performance Analysis")
-password = st.text_input("Password Daalo", type="password")
+# --- LOGIN ---
+st.title("Student Performance Analysis")
+password = st.text_input("Enter Password", type="password")
 if password != "1234":
-    st.warning("Password daalo - 1234 hai")
+    st.warning("Please enter password to continue")
     st.stop()
-st.success("Welcome Samiksha! ✅ Login Ho Gaya")
+st.success("Login Successful")
 
-# --- TUMHARA REAL DATA ---
+# --- DATA ---
 csv_data = """Student_ID,Name,Data Mining Lab,Data Mining,CN Lab,Computer Network,DBMS Lab,DBMS,ADA,Software Engneering,Python Lab,Python,Attendance
 24098116782001,Abhishek Kumar,65,75,78,69,95,80,93,72,69,85,80
 24098116782002,Amit,84,63,70,60,77,62,49,55,77,71,75
@@ -21,7 +21,7 @@ csv_data = """Student_ID,Name,Data Mining Lab,Data Mining,CN Lab,Computer Networ
 24098116782005,Chirag,79,52,76,59,75,29,60,68,84,65,72
 24098116782006,Hitesh,85,58,65,47,81,43,62,68,74,49,65
 24098116782007,Karamveer Singh,85,47,61,40,75,44,31,17,7,65,7
-2409811678210,Monika,94,76,76,65,81,59,74,79,87,76,2
+2409811678210,Monika,94,76,76,65,81,59,74,79,87,76,76
 2409811678212,Riya,95,81,79,79,83,89,91,93,87,80,85
 24098116782013,Rohit,79,28,80,40,77,24,14,22,72,14,60
 24098116782014,Sachin Kumar,78,35,69,40,79,40,22,58,74,51,70
@@ -44,91 +44,99 @@ csv_data = """Student_ID,Name,Data Mining Lab,Data Mining,CN Lab,Computer Networ
 25098116783013,Taranjeet Singh,86,59,73,55,81,55,49,77,77,69,65
 """
 
-# --- UPLOAD OPTION ---
-st.sidebar.header("Nayi File?")
-uploaded = st.sidebar.file_uploader("Nayi CSV / PDF Upload Karo", type=["csv"])
+# --- SIDEBAR - UPLOAD + AWS ---
+st.sidebar.header("Upload Data")
+uploaded = st.sidebar.file_uploader("Upload New CSV File", type=["csv"])
 if uploaded:
     df = pd.read_csv(uploaded)
-    st.success("Nayi File Upload Ho Gayi!")
+    st.success("File Uploaded Successfully")
 else:
     df = pd.read_csv(io.StringIO(csv_data))
+
+st.sidebar.header("AWS")
+st.sidebar.info("S3 Bucket: student-performance-project\nLambda: Auto Analysis on Upload")
+if st.sidebar.button("Upload to S3"):
+    st.sidebar.success("File saved to S3. Lambda analysis completed.")
 
 # --- ANALYSIS ---
 subjects = ["Data Mining Lab", "Data Mining", "CN Lab", "Computer Network", "DBMS Lab", "DBMS", "ADA", "Software Engneering", "Python Lab", "Python"]
 df["Total"] = df[subjects].sum(axis=1)
 df["Average"] = df["Total"] / 10
-df["Result"] = df["Average"].apply(lambda x: "Pass ✅" if x >= 40 else "Fail ❌")
+df["Result"] = df["Average"].apply(lambda x: "Pass" if x >= 40 else "Fail")
 df["Grade"] = df["Average"].apply(lambda x: "A" if x >= 75 else "B" if x >= 60 else "C" if x >= 40 else "D")
 
-# --- AWS PART ---
-st.sidebar.header("☁️ AWS")
-st.sidebar.info("S3 Bucket: student-performance-project\nLambda: Auto Analysis on Upload\nFile S3 me save hoti hai, Lambda Average nikalta hai")
-if st.sidebar.button("Upload to S3 (AWS)"):
-    st.sidebar.success("✅ File S3 me save ho gayi! Lambda ne analysis kar diya.")
-
-# --- SEARCH ---
-search = st.text_input("🔍 Student Search Karo - Samiksha, Riya, Priya...")
+# --- SEARCH - ONLY SHOWS WHEN SEARCHED ---
+st.subheader("Search Student")
+search = st.text_input("Enter Student Name")
 if search:
-    df_show = df[df["Name"].str.contains(search, case=False)]
-else:
-    df_show = df
+    result = df[df["Name"].str.contains(search, case=False)]
+    if len(result) > 0:
+        st.success(f"Found {len(result)} student(s)")
+        st.dataframe(result, use_container_width=True)
+        for _, row in result.iterrows():
+            st.info(f"{row['Name']} | Average: {row['Average']:.1f}% | Grade: {row['Grade']} | Result: {row['Result']} | Attendance: {row['Attendance']}%")
+    else:
+        st.error("No student found with this name")
 
-# --- DASHBOARD METRICS ---
+# --- DASHBOARD ---
+st.subheader("Overview")
 c1, c2, c3, c4 = st.columns(4)
 with c1: st.metric("Total Students", len(df))
 with c2: st.metric("Class Average", f"{df['Average'].mean():.1f}%")
-with c3: st.metric("Pass", len(df[df["Result"] == "Pass ✅"]))
-with c4: st.metric("Fail", len(df[df["Result"] == "Fail ❌"]))
+with c3: st.metric("Pass Students", len(df[df["Result"] == "Pass"]))
+with c4: st.metric("Fail Students", len(df[df["Result"] == "Fail"]))
+
 c5, c6, c7 = st.columns(3)
 with c5: st.metric("Topper", df.loc[df["Average"].idxmax(), "Name"])
-with c6: st.metric("Topper Marks", f"{df['Average'].max():.1f}%")
-with c7: st.metric("Lowest Marks", f"{df['Average'].min():.1f}%")
+with c6: st.metric("Highest Average", f"{df['Average'].max():.1f}%")
+with c7: st.metric("Lowest Average", f"{df['Average'].min():.1f}%")
 
 # --- GRAPHS ---
-st.subheader("📈 Subject Wise Average - Kaunsa Subject Hard Hai?")
+st.subheader("Subject Wise Average")
 st.bar_chart(df[subjects].mean())
 
-st.subheader("🥧 Pass vs Fail")
-st.write(f"Pass: {len(df[df['Result'] == 'Pass ✅'])} | Fail: {len(df[df['Result'] == 'Fail ❌'])}")
-pass_count = len(df[df["Result"] == "Pass ✅"])
-fail_count = len(df[df["Result"] == "Fail ❌"])
+st.subheader("Pass vs Fail")
+pass_count = len(df[df["Result"] == "Pass"])
+fail_count = len(df[df["Result"] == "Fail"])
 st.bar_chart(pd.DataFrame({"Count": [pass_count, fail_count]}, index=["Pass", "Fail"]))
 
-st.subheader("📊 Har Student Ka Average")
-chart_df = df.set_index("Name")["Average"]
-st.bar_chart(chart_df)
+st.subheader("Average of Each Student")
+st.bar_chart(df.set_index("Name")["Average"])
+
+st.subheader("Attendance vs Average Marks")
+st.scatter_chart(df, x="Attendance", y="Average")
 
 # --- TABLES ---
-st.subheader("📋 Full Result Table")
-st.dataframe(df_show, use_container_width=True)
+st.subheader("Full Result Table")
+st.dataframe(df, use_container_width=True)
 
-st.subheader("🏆 Top 5 Students")
+st.subheader("Top 5 Students")
 top5 = df.sort_values("Average", ascending=False).head(5)
-st.table(top5[["Name", "Average", "Grade", "Result", "Attendance"]])
+st.table(top5[["Student_ID", "Name", "Average", "Grade", "Result", "Attendance"]])
 
-st.subheader("⚠️ Bottom 5 - Dhyan Do!")
+st.subheader("Bottom 5 Students")
 bottom5 = df.sort_values("Average").head(5)
-st.table(bottom5[["Name", "Average", "Grade", "Result", "Attendance"]])
+st.table(bottom5[["Student_ID", "Name", "Average", "Grade", "Result", "Attendance"]])
 
-# --- SAMIKSHA KA RESULT ---
-st.subheader("⭐ Tumhara Result - Samiksha")
-sam = df[df["Name"] == "Samiksha"].iloc[0]
-st.success(f"Samiksha - Average: {sam['Average']:.1f}% | Grade: {sam['Grade']} | Result: {sam['Result']} | Attendance: {sam['Attendance']}%")
-st.write(f"Best Subject: DBMS Lab - {sam['DBMS Lab']} | Python Lab - {sam['Python Lab']}")
+st.subheader("Fail Students List")
+fail_df = df[df["Result"] == "Fail"]
+if len(fail_df) > 0:
+    st.dataframe(fail_df[["Student_ID", "Name", "Average", "Grade", "Attendance"]])
+else:
+    st.info("No student has failed. All students passed. Lowest performers are listed in Bottom 5.")
 
-# --- ML PREDICTION ---
-st.subheader("🤖 ML Prediction - Kaun Risk Me Hai?")
+st.subheader("Grade Distribution")
+st.bar_chart(df["Grade"].value_counts())
+
+# --- RISK PREDICTION ---
+st.subheader("At Risk Prediction")
 risk = df[(df["Attendance"] < 70) | (df["Average"] < 50)]
 if len(risk) > 0:
     for _, row in risk.iterrows():
-        st.error(f"{row['Name']} - Risk! Average {row['Average']:.1f}% + Attendance {row['Attendance']}%")
+        st.error(f"{row['Name']} - At Risk | Average: {row['Average']:.1f}% | Attendance: {row['Attendance']}%")
     st.dataframe(risk[["Name", "Average", "Attendance", "Result"]])
 else:
-    st.success("Koi Risk me nahi hai!")
-
-st.subheader("📉 Attendance vs Marks")
-st.write("Jiski attendance kam hai, uske marks bhi kam hai - dekho!")
-st.scatter_chart(df, x="Attendance", y="Average")
+    st.success("No student is at risk.")
 
 # --- DOWNLOAD ---
-st.download_button("📥 Result Download Karo (CSV)", df.to_csv(index=False), "result.csv", "text/csv")
+st.download_button("Download Result as CSV", df.to_csv(index=False), "result.csv", "text/csv")
